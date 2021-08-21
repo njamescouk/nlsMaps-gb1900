@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>NLS Maps / GB1900 river Thames mashup</title>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no"/>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+       integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+       crossorigin=""/>
+   <script src="http://cdn.leafletjs.com/leaflet/v0.7.7/leaflet.js"></script>
+   <script src="riverThames.js"></script>
+    <script>
+      function init() {
+          var mapBounds = new L.LatLngBounds(
+              new L.LatLng(51.4, -.1),
+              new L.LatLng(51.6, .2));
+          var mapMinZoom = 1;
+          var mapMaxZoom = 20;
+        var map = L.map('map').setView([51.5, 0.1], 10);
+        
+        L.tileLayer( 'http://nls-{s}.tileserver.com/nls/{z}/{x}/{y}.jpg', {
+            minZoom: mapMinZoom, maxZoom: mapMaxZoom,
+            bounds: mapBounds,
+            attribution: 'Historical Maps Layer, 1919-1947 from the <a href="http://maps.nls.uk/projects/api/">NLS Maps API</a>',opacity: 0.85, subdomains: '0123'
+          }).addTo(map);
+
+        var popups = [];
+        for (i = 0; i < gbMash.length; i++)
+        {
+            var thing = gbMash[i];
+            /*
+            var marker = L.marker([thing.lat, thing.long]).addTo(map);
+            marker.bindPopup(thing.text).openPopup();
+            */
+           /*
+            var markerLocation = new L.LatLng(thing.lat, thing.long);
+            var marker = new L.Marker(markerLocation);
+            map.addLayer(marker);
+
+            marker.bindPopup(thing.text);
+            */
+
+            // this is the 4th attempt at getting the text to popup
+            // life is too short for any more mucking about
+            marker = new L.marker([thing.lat, thing.long])
+                .bindPopup(thing.text)
+                .addTo(map);
+            /*
+            var thing = gbMash[i];
+            var marker = L.marker([thing.lat, thing.long]).addTo(map).marker.bindPopup(thing.text);
+
+            popups.insert(L.popup()
+                        .setLatLng([thing.lat, thing.long])
+                        .setContent(thing.text)
+                        .openOn(map));
+            */
+        }
+      }
+    </script>
+    <style>
+       html, body { font-family: 'Lucida Grande',Geneva,Arial,Verdana,sans-serif; }
+       body { margin: 10px; background: #fff; }
+       #map { border: 1px solid gray; width: 600px; height: 400px; position: relative;}
+    </style>
+
+  </head>
+  <body onload="init()">
+    <h1>NLS Maps / GB1900 river Thames mashup</h1>
+
+    <p><a href="http://www.nls.uk/">National Library of Scotland</a> 
+    &amp; <a href="http://www.klokantech.com/">Klokan Technologies GmbH</a></p>
+    <p>Historical maps from 1919-47 <a href="http://maps.nls.uk/projects/api/">NLS Maps API</a></p>
+    <p>The GB1900 Gazetteer (Abridged) is made available by the 
+GB1900 Project<br> - the Great Britain Historical GIS Project at 
+the University of Portsmouth,<br> the GB1900 partners and volunteers.</p>
+
+<div id="map"></div>
+</body>
+</html>

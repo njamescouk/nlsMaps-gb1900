@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="" xml:lang="">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="pandoc" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes" />
+  <meta name="author" content="N James" />
+  <title>Extending GB1900</title>
+  <style type="text/css">
+      /* code{white-space: pre-wrap;} */
+      span.smallcaps{font-variant: small-caps;}
+      span.underline{text-decoration: underline;}
+      div.column{display: inline-block; vertical-align: top; width: 50%;}
+  </style>
+  <!--[if lt IE 9]>
+    <script src="//cdnjs.cloudflare.com/ajax/libs/html5shiv/3.7.3/html5shiv-printshiv.min.js"></script>
+  <![endif]-->
+</head>
+<body>
+<header>
+<h1 class="title">Extending GB1900</h1>
+<p class="author">N James</p>
+<p class="date">21/08/2021</p>
+</header>
+<nav id="TOC">
+<ul>
+<li><a href="#extending-gb1900">Extending GB1900</a>
+<ul>
+<li><a href="#acknowledgment">Acknowledgment</a></li>
+<li><a href="#motivation">Motivation</a></li>
+<li><a href="#extension">Extension</a></li>
+<li><a href="#conversion-to-database">Conversion to Database</a></li>
+<li><a href="#extracting-data">Extracting Data</a></li>
+<li><a href="#further-work">Further Work</a></li>
+</ul></li>
+</ul>
+</nav>
+<h1 id="extending-gb1900">Extending GB1900</h1>
+<h2 id="acknowledgment">Acknowledgment</h2>
+<p>The GB1900 Gazetteer (Abridged) is made available by the GB1900 Project - the Great Britain Historical GIS Project at the University of Portsmouth, the GB1900 partners and volunteers.</p>
+<h2 id="motivation">Motivation</h2>
+<p>Whilst reading up on Yorkshire’s geology I came across a reference to a Tinkers Hill, which I eventually found thanks to the GB1900 project.</p>
+<p>I’ve done some work to make this easier (for me, at least) to use; read on for more.</p>
+<h2 id="extension">Extension</h2>
+<p>The big idea is to put the GB1900 data, supplied as csv, into a database and provide a reasonably straightforward way of extracting place names and locations. The end result is an <a href="https://sqlite.org/index.html">sqlite</a> database taking up about .75Gb of storage. I can’t host that so what follows is a recipie to recreate the database from the <code>gb1900_abridged.csv</code> file downloaded in a zip file from <a href="https://www.visionofbritain.org.uk/data/">the GB1900</a> site. This also helps if you want to replicate or improve on what I’ve done.</p>
+<p>I’m on windows 7, but I have some of <a href="https://www.msys2.org/">MSYS</a> installed so the method should translate to linux easily enough, but may be problematic on a raw windows installation. You’ll need <a href="https://sqlite.org/download.html">sqlite3</a> to do the database management.</p>
+<p>The first problem is <em>extracting the csv file</em>. This fails on windows 7 when using explorer, ultimate zip and 7z. The windows 10 file manager extracts it with no problem. I don’t what other methods there are.</p>
+<h2 id="conversion-to-database">Conversion to Database</h2>
+<p>Having extracted files from the zip to the src directory, create the database and tables (what follows is wrapped up in <a href="createGB1900Db.bat"><code>createGB1900Db.bat</code></a>):</p>
+<pre><code>sqlite3 gb1900.db &lt; createTables.sql</code></pre>
+<p><code>gb1900_abridged.csv</code> is encoded as UTF-16LE. We need to convert this to UTF-8, either do</p>
+<pre><code>iconv -f UTF-16LE -t UTF-8 src\gb1900_abridged.csv &gt; abridged_utf8.csv</code></pre>
+<p>or open <code>gb1900_abridged.csv</code> in a modern text editor and save as <code>abridged_utf8.csv</code> with encoding UTF-8.</p>
+<p>Import into <code>gb1900.db</code> with and use makeGazetteer.sql to transfer data into a table with properly typed geo coordinates.</p>
+<pre><code>sqlite3 -csv gb1900.db &quot;.import abridged_utf8.csv abridged_utf8&quot;
+sqlite3 -csv %GB_DB% &lt; makeGazetteer.sql</code></pre>
+<p>This takes some time.</p>
+<p>This table has locations expressed as latitude-longitude and as absolute Ordnance Survey grid references. It’s handy to have grid references with the letter codes for 100 Km squares, these commands (along with supplied csv and sql files) create a table called <code>ngr</code>, which has columns <code>pin_id, gridLetters,gridE,gridN</code> with grid references at 1 metre resolution.</p>
+<p>Comments in <a href="populateNGR.sql"><code>populateNGR.sql</code></a> give the gory details</p>
+<pre><code>rem sqlite3 .import doesn&#39;t recognise column types
+sqliteimport %GB_DB% easting100KSquares.csv
+sqliteimport %GB_DB% easting500KSquares.csv
+sqliteimport %GB_DB% northing100KSquares.csv
+sqliteimport %GB_DB% northing500KSquares.csv
+echo populating ngr table
+sqlite3 gb1900.db &lt; populateNGR.sql
+sqlite3 %GB_DB% &quot;DROP TABLE easting100KSquares; DROP TABLE easting500KSquares; DROP TABLE northing100KSquares; DROP TABLE northing500KSquares; </code></pre>
+<p>This takes some time.</p>
+<p>It’s handy to have pre recorded links to the 6” ordnance survey maps at the <a href="https://maps.nls.uk/">National Library of Scotland</a></p>
+<pre><code>sqlite3 %GB_DB% &lt; makeNlsUrl.sql</code></pre>
+<p>Index the tables</p>
+<pre><code>sqlite3 %GB_DB% &quot;CREATE INDEX gazXEN ON gazetteer (osgb_east, osgb_north);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX gazXLAParish ON gazetteer (local_authority, parish);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX gazXLatLong ON gazetteer (latitude, longitude);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX gazXLongLat ON gazetteer (longitude, latitude);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX gazXNE ON gazetteer (osgb_north, osgb_east);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX ngrXletter ON ngr (gridLetters, pin_id);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX ngrXEN ON ngr (gridE, gridN, pin_id);&quot;
+sqlite3 %GB_DB% &quot;CREATE INDEX ngrXNE ON ngr (gridN, gridE, pin_id);&quot;</code></pre>
+<h2 id="extracting-data">Extracting Data</h2>
+<p>For the time being I’ve cooked up some batch files to query the database. These merely make it possible to look for substrings of <code>final text</code>, but emit the results in different formats.</p>
+<ul>
+<li><p>getPlace.bat</p>
+<p>gives <code>final_text, parish, local authority, gridRef</code> straight to screen, eg</p>
+<pre>
+ $ getPlace.bat waifs
+ sought: waifs
+ place                                parish                     LA          gridRef
+ -----------------------------------  -------------------------  ----------  --------------
+ Home for Waifs & Strays              Nidd                       Harrogate   SE 30541 59830
+ Beckett Home (Waifs & Strays)        Leeds (Un-parished)        Leeds       SE 28406 37473
+ St. Chad's Home (Waifs & Strays)     Leeds (Un-parished)        Leeds       SE 27581 37104
+ Rose Cottage (Home for Waifs & Stra  Dickleburgh And Rushall    South Norf  TM 16581 82264
+ Industrial Home (Waifs & Strays)     Walsham-Le-Willows         Mid Suffol  TL 99704 71245
+ Bognor Boys' Home (Waifs & Strays)   Bognor Regis               Arun        SU 92781 00059
+ </pre></li>
+<li><p>getNlsMap.bat</p>
+<p>writes to the file <a href="example/nlsLinks.html">nlsLinks.html</a> which has links to the location of <code>final_text</code> at the <a href="https://maps.nls.uk/">National Library of Scotland</a> along with <code>parish, local_local_authority, gridRef</code>.</p>
+<p>Should you wish to know about drainage of Romney Marsh, try <code>getNlsMap.bat petty sewer</code>.</p></li>
+<li><p>getMash.bat</p>
+<p>This is a failed attempt to use the <a href="https://maps.nls.uk/projects/api/">NLS Maps Api</a> with leaflet.</p>
+<p>Everything’s hard coded as this is just a preliminary hack. sqlite3 writes a javascript variable containing marker data in <code>mash.js</code></p>
+<p><code>mash.js</code> is referenced by mashup.html. Four attempts at using laflet to write some bits of html into a web page have failed, presumably because of an error imperceptible to the human eye. Such is javascript.</p>
+<p>However the markers usually appear, in a browser dependent fashion, but that’s your lot.</p></li>
+<li><p>river Thames</p>
+<p>In a similar vein <code>sqlite3 gb1900.db &lt; riverThames.sql</code> produces <a href="example/riverThames.html">riverThames.html</a> with a rather more sophisticated query.</p></li>
+</ul>
+<h2 id="further-work">Further Work</h2>
+<p>Obviously a lot more could be done. For my purposes for the time being, it’s done. Should you wish to take it further be my guest, if you have any queries contact me via githhub.</p>
+</body>
+</html>
